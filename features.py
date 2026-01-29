@@ -3,6 +3,7 @@ from typing import Tuple
 import numpy as np
 import torch
 
+from silence import trim_long_silence
 
 def _load_whisper_module():
     try:
@@ -14,13 +15,31 @@ def _load_whisper_module():
     return whisper
 
 
-def _load_audio(wav_path: str, sample_rate: int = 16000) -> Tuple[np.ndarray, float]:
+def _load_audio(
+    wav_path: str,
+    sample_rate: int = 16000,
+    trim_silence: bool = True,
+    trim_top_db: float = 40.0,
+    trim_min_silence_sec: float = 0.5,
+    trim_frame_length: int = 2048,
+    trim_hop_length: int = 512,
+) -> Tuple[np.ndarray, float, float]:
     whisper = _load_whisper_module()
     audio = whisper.load_audio(wav_path)
     if audio.size == 0:
-        return audio.astype(np.float32), 0.0
-    duration = float(audio.shape[0]) / float(sample_rate)
-    return audio.astype(np.float32), duration
+        return audio.astype(np.float32), 0.0, 0.0
+    duration_raw = float(audio.shape[0]) / float(sample_rate)
+    if trim_silence:
+        audio, _ = trim_long_silence(
+            audio.astype(np.float32),
+            sample_rate=sample_rate,
+            top_db=trim_top_db,
+            min_silence_sec=trim_min_silence_sec,
+            frame_length=trim_frame_length,
+            hop_length=trim_hop_length,
+        )
+    duration = float(audio.shape[0]) / float(sample_rate) if audio.size else 0.0
+    return audio.astype(np.float32), duration, duration_raw
 
 
 def _log_mel(audio: np.ndarray) -> np.ndarray:
@@ -45,21 +64,33 @@ def extract_whisper_features(
     mode: str = "whisper_encoder",
     model_name: str = "base",
     device: str = "cpu",
-) -> Tuple[np.ndarray, float]:
+    trim_silence: bool = True,
+    trim_top_db: float = 40.0,
+    trim_min_silence_sec: float = 0.5,
+    trim_frame_length: int = 2048,
+    trim_hop_length: int = 512,
+) -> Tuple[np.ndarray, float, float]:
     """
-    Returns (features, duration_sec).
+    Returns (features, duration_sec, duration_raw_sec).
     Features are float32 of shape (T, d).
     """
     whisper = _load_whisper_module()
 
-    audio, duration = _load_audio(wav_path)
+    audio, duration, duration_raw = _load_audio(
+        wav_path,
+        trim_silence=trim_silence,
+        trim_top_db=trim_top_db,
+        trim_min_silence_sec=trim_min_silence_sec,
+        trim_frame_length=trim_frame_length,
+        trim_hop_length=trim_hop_length,
+    )
     if audio.size == 0:
-        return np.zeros((0, 1), dtype=np.float32), duration
+        return np.zeros((0, 1), dtype=np.float32), duration, duration_raw
 
     if mode == "log_mel":
         mel = _log_mel(audio)
         # Transpose to (T, d)
-        return mel.T.astype(np.float32), duration
+        return mel.T.astype(np.float32), duration, duration_raw
 
     if mode != "whisper_encoder":
         raise ValueError(f"Unsupported feature_mode: {mode}")
@@ -92,8 +123,8 @@ def extract_whisper_features(
         feats.append(encoded[:out_frames].astype(np.float32))
 
     if not feats:
-        return np.zeros((0, 1), dtype=np.float32), duration
-    return np.concatenate(feats, axis=0), duration
+        return np.zeros((0, 1), dtype=np.float32), duration, duration_raw
+    return np.concatenate(feats, axis=0), duration, duration_raw
 
 
 def l2_normalize(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:

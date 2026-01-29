@@ -20,7 +20,9 @@ class AlignmentResult:
     flow_cost: float
 
 
-def _linear_mapping(T1: int, T2: int, D1: float, D2: float) -> AlignmentResult:
+def _linear_mapping(
+    T1: int, T2: int, D1: float, D2: float, D1_raw: float | None = None, D2_raw: float | None = None
+) -> AlignmentResult:
     if T1 <= 1:
         u = np.array([0.0], dtype=np.float32)
         v = np.array([0.0], dtype=np.float32)
@@ -38,6 +40,8 @@ def _linear_mapping(T1: int, T2: int, D1: float, D2: float) -> AlignmentResult:
         "path": path,
         "durations": {"D1": D1, "D2": D2},
     }
+    if D1_raw is not None and D2_raw is not None:
+        mapping["durations_raw"] = {"D1": D1_raw, "D2": D2_raw}
     warp = build_warp(u, v, D1, D2)
     return AlignmentResult(mapping=mapping, warp=warp, flow_cost=0.0)
 
@@ -78,17 +82,38 @@ def run_alignment(
     slope_max: float | None = None,
     max_band_tries: int = 4,
     band_expand: float = 1.5,
+    trim_silence: bool = True,
+    trim_top_db: float = 40.0,
+    trim_min_silence_sec: float = 0.5,
+    trim_frame_length: int = 2048,
+    trim_hop_length: int = 512,
 ) -> AlignmentResult:
-    X, D1 = extract_whisper_features(
-        wav1_path, mode=feature_mode, model_name=model_name, device=device
+    X, D1, D1_raw = extract_whisper_features(
+        wav1_path,
+        mode=feature_mode,
+        model_name=model_name,
+        device=device,
+        trim_silence=trim_silence,
+        trim_top_db=trim_top_db,
+        trim_min_silence_sec=trim_min_silence_sec,
+        trim_frame_length=trim_frame_length,
+        trim_hop_length=trim_hop_length,
     )
-    Y, D2 = extract_whisper_features(
-        wav2_path, mode=feature_mode, model_name=model_name, device=device
+    Y, D2, D2_raw = extract_whisper_features(
+        wav2_path,
+        mode=feature_mode,
+        model_name=model_name,
+        device=device,
+        trim_silence=trim_silence,
+        trim_top_db=trim_top_db,
+        trim_min_silence_sec=trim_min_silence_sec,
+        trim_frame_length=trim_frame_length,
+        trim_hop_length=trim_hop_length,
     )
 
     T1, T2 = len(X), len(Y)
     if T1 < 2 or T2 < 2:
-        return _linear_mapping(max(T1, 1), max(T2, 1), D1, D2)
+        return _linear_mapping(max(T1, 1), max(T2, 1), D1, D2, D1_raw=D1_raw, D2_raw=D2_raw)
 
     if dist == "cosine":
         X = l2_normalize(X)
@@ -139,6 +164,7 @@ def run_alignment(
         "v": v.tolist(),
         "path": path,
         "durations": {"D1": D1, "D2": D2},
+        "durations_raw": {"D1": D1_raw, "D2": D2_raw},
         "config": {
             "feature_mode": feature_mode,
             "model_name": model_name,
@@ -151,6 +177,11 @@ def run_alignment(
             "slope_min": slope_min,
             "slope_max": slope_max,
             "cost_scale": cost_scale,
+            "trim_silence": trim_silence,
+            "trim_top_db": trim_top_db,
+            "trim_min_silence_sec": trim_min_silence_sec,
+            "trim_frame_length": trim_frame_length,
+            "trim_hop_length": trim_hop_length,
         },
     }
 

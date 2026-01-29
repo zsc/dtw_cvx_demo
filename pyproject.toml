@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dtw-cvx"
+version = "0.1.0"
+description = "Whisper feature DTW alignment with convex optimization and warping."
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "torch",
+  "openai-whisper",
+  "ortools<9.15",
+  "cvxpy",
+  "osqp",
+  "librosa",
+  "soundfile",
+  "scipy",
+]
+
+[project.scripts]
+dtw-align = "cli:main"
+dtw-warp = "warp_cli:main"
+
+[tool.setuptools]
+py-modules = [
+  "cli",
+  "cost",
+  "features",
+  "mincost_flow_dtw",
+  "monotone_qp",
+  "path_to_mapping",
+  "pipeline",
+  "warp",
+  "silence",
+  "audio_warp",
+  "warp_cli",
+]
