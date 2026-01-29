@@ -157,11 +157,17 @@
 
     <section class="card" style="margin-bottom:18px;">
       <h2>算法说明（中文）</h2>
-      <div class="legend">基于 Whisper 特征，最小费用流 DTW + 单调平滑 QP 拟合。</div>
+      <div class="legend">流程：Whisper 特征 → DTW（最小费用流/等价 DP）→ 单调 QP 平滑 → 时间映射。</div>
+      <div class="legend">1) 特征：Whisper encoder 时序特征（或 log-mel），逐帧 L2 归一化。</div>
+      <div class="legend">2) 代价：内容距离 + 时间偏离惩罚，并加带宽约束，避免路径过度偏离对角线。</div>
+      <div class="legend">3) 路径：用最小费用流求单调路径（等价 DP 的全局最优），可加入水平/垂直步惩罚。</div>
+      <div class="legend">4) 映射：对每个 i 取匹配 j 的中位数得到 hat_v，再用 QP 做单调+平滑拟合。</div>
+      <div class="legend">5) 输出：t2 = D2 · v(t1/D1)，用于光滑时间扭曲与音频重采样。</div>
       <div class="formula">C(i,j) = 1 - ⟨x_i, y_j⟩ + γ · | i/(T1-1) - j/(T2-1) |</div>
+      <div class="formula">| i/(T1-1) - j/(T2-1) | ≤ r  （Sakoe-Chiba band）</div>
       <div class="formula">min Σ_e cost(e) · f_e  s.t. flow conservation, f_e ∈ [0,1]</div>
       <div class="formula">min Σ w_i (v_i-^hat{v}_i)^2 + α||D1 v||^2 + β||D2 v||^2,  v_{i+1} ≥ v_i</div>
-      <div class="legend">离散路径 P 转为 hat_v，再用 QP 拟合连续单调映射 v(u)，实现 t2 = D2 · v(t1/D1)。</div>
+      <div class="legend">长静音段切除：用能量门限检测长静音并删除，保留短暂停顿避免过拟合静音拖拽。</div>
       <div class="legend">长静音段切除：top_db=40.0, min_silence=0.50s。</div>
       <div class="legend">本次对齐耗时：A→B 3.378s，B→A 1.956s。</div>
     </section>
